@@ -9,9 +9,18 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || "jac_impulso_humano_secret";
 
-app.use(cors({
-  origin: "https://benevolent-torte-ff278c.netlify.app"
-}));
+const corsOptions = {
+  origin: [
+    "https://benevolent-torte-ff278c.netlify.app",
+    "http://localhost:5173",
+    "http://localhost:5174",
+  ],
+  methods: ["GET", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use(express.json());
 
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -71,6 +80,10 @@ function validarAdmin(req, res, next) {
   next();
 }
 
+app.get("/", (req, res) => {
+  res.json({ message: "Backend JAC Impulso Humano activo" });
+});
+
 app.post("/api/auth/login", (req, res) => {
   const { correo, password } = req.body;
 
@@ -79,7 +92,9 @@ app.post("/api/auth/login", (req, res) => {
   );
 
   if (!usuario) {
-    return res.status(401).json({ message: "Usuario o contraseña incorrectos" });
+    return res.status(401).json({
+      message: "Usuario o contraseña incorrectos",
+    });
   }
 
   const token = jwt.sign(
@@ -118,7 +133,10 @@ app.post(
       return res.status(400).json({ message: "Archivo requerido" });
     }
 
-    const extension = path.extname(req.file.originalname).replace(".", "").toUpperCase();
+    const extension = path
+      .extname(req.file.originalname)
+      .replace(".", "")
+      .toUpperCase();
 
     const material = {
       id: nextId++,
@@ -173,5 +191,5 @@ app.delete("/api/materiales/:id", validarToken, validarAdmin, (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Backend JAC corriendo en http://localhost:${PORT}`);
+  console.log(`Backend JAC corriendo en puerto ${PORT}`);
 });

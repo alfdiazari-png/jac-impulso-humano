@@ -34,7 +34,37 @@ import { Button } from "@/components/ui/button";
 import jacLogo from "./assets/JAC.png";
 import jacAuto from "./assets/jac-auto.png";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+const API_URL = import.meta.env.VITE_API_URL;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const fetchConRetry = async (url, options = {}, intentos = 4, espera = 3500) => {
+  let ultimoError;
+
+  for (let intento = 1; intento <= intentos; intento++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+      return response;
+    } catch (error) {
+      ultimoError = error;
+      console.warn(`Intento ${intento} fallido. Reintentando conexión con backend...`, error);
+
+      if (intento < intentos) {
+        await sleep(espera);
+      }
+    }
+  }
+
+  throw ultimoError;
+};
 
 const categorias = ["Todos", "Reflexión", "Superación", "Coaching", "Liderazgo"];
 
@@ -118,13 +148,13 @@ export default function JacLiderazgoEmpresarial() {
 
   const cargarMateriales = async () => {
     try {
-      const res = await fetch(`${API_URL}/materiales`);
+      const res = await fetchConRetry(`${API_URL}/materiales`);
       if (!res.ok) throw new Error("No se pudo consultar el backend");
       const data = await res.json();
       setMateriales(data);
       setBackendActivo(true);
     } catch (error) {
-      console.warn("Backend no disponible, se muestran datos demo.", error);
+      console.warn("Backend no disponible o despertando en Render, se muestran datos demo.", error);
       setBackendActivo(false);
     }
   };
@@ -160,7 +190,7 @@ export default function JacLiderazgoEmpresarial() {
     setCargando(true);
 
     try {
-      const res = await fetch(`${API_URL}/auth/login`, {
+      const res = await fetchConRetry(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(login),
@@ -179,7 +209,7 @@ export default function JacLiderazgoEmpresarial() {
       setVista("dashboard");
       setBackendActivo(true);
     } catch (error) {
-      setErrorLogin("No se pudo conectar con el servidor backend.");
+      setErrorLogin("No se pudo conectar con el servidor backend. Si Render estaba dormido, espera unos segundos e intenta nuevamente.");
       setBackendActivo(false);
     } finally {
       setCargando(false);
@@ -209,7 +239,7 @@ export default function JacLiderazgoEmpresarial() {
     formData.append("descripcion", nuevoMaterial.descripcion || "Archivo cargado desde panel administrativo.");
 
     try {
-      const res = await fetch(`${API_URL}/materiales`, {
+      const res = await fetchConRetry(`${API_URL}/materiales`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -241,7 +271,7 @@ export default function JacLiderazgoEmpresarial() {
     }
 
     try {
-      const res = await fetch(`${API_URL}/materiales/${id}`, {
+      const res = await fetchConRetry(`${API_URL}/materiales/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -472,7 +502,7 @@ export default function JacLiderazgoEmpresarial() {
                 />
                 {errorLogin && <p className="text-sm font-semibold text-red-600">{errorLogin}</p>}
                 <Button disabled={cargando} className="rounded-xl bg-red-600 py-6 text-base font-bold hover:bg-red-700 disabled:opacity-60">
-                  <LogIn className="mr-2 h-4 w-4" /> {cargando ? "Validando..." : "Entrar"}
+                  <LogIn className="mr-2 h-4 w-4" /> {cargando ? "Despertando servidor..." : "Entrar"}
                 </Button>
               </form>
             </CardContent>
