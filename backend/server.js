@@ -9,7 +9,9 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || "jac_impulso_humano_secret";
 
-app.use(cors());
+app.use(cors({
+  origin: "https://benevolent-torte-ff278c.netlify.app"
+}));
 app.use(express.json());
 
 const uploadsDir = path.join(process.cwd(), "uploads");
