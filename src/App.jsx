@@ -34,7 +34,7 @@ import { Button } from "@/components/ui/button";
 import jacLogo from "./assets/JAC.png";
 import jacAuto from "./assets/jac-auto.png";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -471,7 +471,7 @@ export default function JacLiderazgoEmpresarial() {
             <div className="mt-6 rounded-3xl border border-white/10 bg-white/10 p-5 text-sm text-slate-300">
               <p><b>Admin:</b> admin@jac.com / admin123</p>
               <p><b>Usuario:</b> usuario@jac.com / usuario123</p>
-              <p className="mt-2 text-xs text-slate-400">El acceso se valida contra el backend en http://localhost:3001/api.</p>
+              <p className="mt-2 text-xs text-slate-400">El acceso se valida contra el backend productivo en Render.</p>
             </div>
           </div>
 

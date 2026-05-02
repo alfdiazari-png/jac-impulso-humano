@@ -4,14 +4,28 @@ import multer from "multer";
 import jwt from "jsonwebtoken";
 import fs from "fs";
 import path from "path";
+import bcrypt from "bcryptjs";
+import { PrismaClient } from "@prisma/client";
+import { v2 as cloudinary } from "cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 const app = express();
-const PORT = process.env.PORT || 3001;
-const JWT_SECRET = process.env.JWT_SECRET || "jac_impulso_humano_secret";
+const prisma = new PrismaClient();
 
-console.log("Iniciando servidor JAC Impulso Humano...");
-console.log("PORT:", PORT);
-console.log("NODE_ENV:", process.env.NODE_ENV || "development");
+const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || "jac_super_seguro_2026";
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 const corsOptions = {
   origin: [
@@ -27,38 +41,15 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(express.json());
 
-const uploadsDir = path.join(process.cwd(), "uploads");
-
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-
-const storage = multer.diskStorage({
-  destination: uploadsDir,
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "jac-materiales",
+    resource_type: "auto",
   },
 });
 
 const upload = multer({ storage });
-
-let materiales = [];
-let nextId = 1;
-
-const usuarios = [
-  {
-    correo: "admin@jac.com",
-    password: "admin123",
-    nombre: "Administrador JAC",
-    rol: "admin",
-  },
-  {
-    correo: "usuario@jac.com",
-    password: "usuario123",
-    nombre: "Colaborador JAC",
-    rol: "usuario",
-  },
-];
 
 function validarToken(req, res, next) {
   const auth = req.headers.authorization;
@@ -73,7 +64,7 @@ function validarToken(req, res, next) {
     req.usuario = jwt.verify(token, JWT_SECRET);
     next();
   } catch {
-    res.status(401).json({ message: "Token inválido" });
+    return res.status(401).json({ message: "Token inválido" });
   }
 }
 
@@ -100,110 +91,171 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.post("/api/auth/login", (req, res) => {
-  const { correo, password } = req.body;
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const { correo, password } = req.body;
 
-  const usuario = usuarios.find(
-    (u) => u.correo === correo && u.password === password
-  );
+    const usuario = await prisma.usuario.findUnique({
+      where: { correo },
+    });
 
-  if (!usuario) {
-    return res.status(401).json({
-      message: "Usuario o contraseña incorrectos",
+    if (!usuario) {
+      return res.status(401).json({
+        message: "Usuario o contraseña incorrectos",
+      });
+    }
+
+    const match = await bcrypt.compare(password, usuario.password);
+
+    if (!match) {
+      return res.status(401).json({
+        message: "Usuario o contraseña incorrectos",
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        id: usuario.id,
+        correo: usuario.correo,
+        rol: usuario.rol,
+      },
+      JWT_SECRET,
+      { expiresIn: "8h" }
+    );
+
+    res.json({
+      token,
+      usuario: {
+        id: usuario.id,
+        correo: usuario.correo,
+        nombre: usuario.nombre,
+        rol: usuario.rol,
+      },
+    });
+  } catch (error) {
+    console.error("Error en login:", error);
+    res.status(500).json({
+      message: "Error interno del servidor",
     });
   }
-
-  const token = jwt.sign(
-    {
-      correo: usuario.correo,
-      nombre: usuario.nombre,
-      rol: usuario.rol,
-    },
-    JWT_SECRET,
-    { expiresIn: "8h" }
-  );
-
-  res.json({
-    token,
-    usuario: {
-      correo: usuario.correo,
-      nombre: usuario.nombre,
-      rol: usuario.rol,
-    },
-  });
 });
 
-app.get("/api/materiales", (req, res) => {
-  res.json(materiales);
+app.get("/api/materiales", async (req, res) => {
+  try {
+    const materiales = await prisma.material.findMany({
+      orderBy: { id: "desc" },
+    });
+
+    res.json(materiales);
+  } catch (error) {
+    console.error("Error al consultar materiales:", error);
+    res.status(500).json({ message: "Error al consultar materiales" });
+  }
 });
 
-app.post(
-  "/api/materiales",
+archivo: req.file.path,
   validarToken,
   validarAdmin,
   upload.single("archivo"),
-  (req, res) => {
-    const { titulo, categoria, descripcion } = req.body;
+  async (req, res) => {
+    try {
+      const { titulo, categoria, descripcion } = req.body;
 
-    if (!req.file) {
-      return res.status(400).json({ message: "Archivo requerido" });
+      if (!req.file) {
+        return res.status(400).json({ message: "Archivo requerido" });
+      }
+
+      const extension = path
+        .extname(req.file.originalname)
+        .replace(".", "")
+        .toUpperCase();
+
+      const material = await prisma.material.create({
+        data: {
+          titulo,
+          categoria,
+          descripcion,
+          tipo: extension,
+          fecha: new Date().toISOString().slice(0, 10),
+          descargas: 0,
+          vistas: 0,
+          archivo: req.file.filename,
+        },
+      });
+
+      res.status(201).json(material);
+    } catch (error) {
+      console.error("Error al subir material:", error);
+      res.status(500).json({ message: "Error al subir material" });
     }
-
-    const extension = path
-      .extname(req.file.originalname)
-      .replace(".", "")
-      .toUpperCase();
-
-    const material = {
-      id: nextId++,
-      titulo,
-      categoria,
-      descripcion,
-      tipo: extension,
-      fecha: new Date().toISOString().slice(0, 10),
-      descargas: 0,
-      vistas: 0,
-      archivoOriginal: req.file.originalname,
-      archivoServidor: req.file.filename,
-    };
-
-    materiales.unshift(material);
-
-    res.status(201).json(material);
   }
 );
 
-app.get("/api/materiales/:id/descargar", (req, res) => {
-  const id = Number(req.params.id);
-  const material = materiales.find((m) => m.id === id);
+app.get("/api/materiales/:id/descargar", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
 
-  if (!material) {
-    return res.status(404).json({ message: "Material no encontrado" });
+    const material = await prisma.material.findUnique({
+      where: { id },
+    });
+
+    if (!material) {
+      return res.status(404).json({ message: "Material no encontrado" });
+    }
+
+    await prisma.material.update({
+      where: { id },
+      data: {
+        descargas: material.descargas + 1 },
+    });
+
+    res.redirect(material.archivo);
+  } catch (error) {
+    console.error("Error al descargar material:", error);
+    res.status(500).json({ message: "Error al descargar material" });
   }
-
-  material.descargas += 1;
-
-  const filePath = path.join(uploadsDir, material.archivoServidor);
-  res.download(filePath, material.archivoOriginal);
 });
 
-app.delete("/api/materiales/:id", validarToken, validarAdmin, (req, res) => {
-  const id = Number(req.params.id);
-  const material = materiales.find((m) => m.id === id);
+    const filePath = path.join(uploadsDir, material.archivo);
 
-  if (!material) {
-    return res.status(404).json({ message: "Material no encontrado" });
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "Archivo físico no encontrado" });
+    }
+
+    res.download(filePath, material.archivo);
+  } catch (error) {
+    console.error("Error al descargar material:", error);
+    res.status(500).json({ message: "Error al descargar material" });
   }
+});
 
-  const filePath = path.join(uploadsDir, material.archivoServidor);
+app.delete("/api/materiales/:id", validarToken, validarAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
 
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
+    const material = await prisma.material.findUnique({
+      where: { id },
+    });
+
+    if (!material) {
+      return res.status(404).json({ message: "Material no encontrado" });
+    }
+
+    const filePath = path.join(uploadsDir, material.archivo);
+
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    await prisma.material.delete({
+      where: { id },
+    });
+
+    res.json({ message: "Material eliminado correctamente" });
+  } catch (error) {
+    console.error("Error al eliminar material:", error);
+    res.status(500).json({ message: "Error al eliminar material" });
   }
-
-  materiales = materiales.filter((m) => m.id !== id);
-
-  res.json({ message: "Material eliminado correctamente" });
 });
 
 app.use((req, res) => {
