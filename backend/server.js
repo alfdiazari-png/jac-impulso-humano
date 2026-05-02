@@ -9,6 +9,10 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || "jac_impulso_humano_secret";
 
+console.log("Iniciando servidor JAC Impulso Humano...");
+console.log("PORT:", PORT);
+console.log("NODE_ENV:", process.env.NODE_ENV || "development");
+
 const corsOptions = {
   origin: [
     "https://benevolent-torte-ff278c.netlify.app",
@@ -24,6 +28,7 @@ app.options(/.*/, cors(corsOptions));
 app.use(express.json());
 
 const uploadsDir = path.join(process.cwd(), "uploads");
+
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
@@ -81,7 +86,18 @@ function validarAdmin(req, res, next) {
 }
 
 app.get("/", (req, res) => {
-  res.json({ message: "Backend JAC Impulso Humano activo" });
+  res.json({
+    status: "OK",
+    service: "JAC Backend activo",
+    port: PORT,
+  });
+});
+
+app.get("/health", (req, res) => {
+  res.json({
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.post("/api/auth/login", (req, res) => {
@@ -190,6 +206,13 @@ app.delete("/api/materiales/:id", validarToken, validarAdmin, (req, res) => {
   res.json({ message: "Material eliminado correctamente" });
 });
 
-app.listen(PORT, () => {
+app.use((req, res) => {
+  res.status(404).json({
+    message: "Ruta no encontrada",
+    path: req.originalUrl,
+  });
+});
+
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Backend JAC corriendo en puerto ${PORT}`);
 });

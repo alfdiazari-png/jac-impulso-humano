@@ -38,20 +38,12 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const fetchConRetry = async (url, options = {}, intentos = 4, espera = 3500) => {
+const fetchConRetry = async (url, options = {}, intentos = 4, espera = 10000) => {
   let ultimoError;
 
   for (let intento = 1; intento <= intentos; intento++) {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000);
-
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
+      const response = await fetch(url, options);
       return response;
     } catch (error) {
       ultimoError = error;
