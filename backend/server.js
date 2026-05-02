@@ -2,18 +2,10 @@ import express from "express";
 import cors from "cors";
 import multer from "multer";
 import jwt from "jsonwebtoken";
-import fs from "fs";
-import path from "path";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { v2 as cloudinary } from "cloudinary";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
 
 const app = express();
 const prisma = new PrismaClient();
@@ -153,7 +145,8 @@ app.get("/api/materiales", async (req, res) => {
   }
 });
 
-archivo: req.file.path,
+app.post(
+  "/api/materiales",
   validarToken,
   validarAdmin,
   upload.single("archivo"),
@@ -165,9 +158,9 @@ archivo: req.file.path,
         return res.status(400).json({ message: "Archivo requerido" });
       }
 
-      const extension = path
-        .extname(req.file.originalname)
-        .replace(".", "")
+      const extension = req.file.originalname
+        .split(".")
+        .pop()
         .toUpperCase();
 
       const material = await prisma.material.create({
@@ -179,7 +172,7 @@ archivo: req.file.path,
           fecha: new Date().toISOString().slice(0, 10),
           descargas: 0,
           vistas: 0,
-          archivo: req.file.filename,
+          archivo: req.file.path,
         },
       });
 
@@ -206,23 +199,11 @@ app.get("/api/materiales/:id/descargar", async (req, res) => {
     await prisma.material.update({
       where: { id },
       data: {
-        descargas: material.descargas + 1 },
+        descargas: material.descargas + 1,
+      },
     });
 
     res.redirect(material.archivo);
-  } catch (error) {
-    console.error("Error al descargar material:", error);
-    res.status(500).json({ message: "Error al descargar material" });
-  }
-});
-
-    const filePath = path.join(uploadsDir, material.archivo);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ message: "Archivo físico no encontrado" });
-    }
-
-    res.download(filePath, material.archivo);
   } catch (error) {
     console.error("Error al descargar material:", error);
     res.status(500).json({ message: "Error al descargar material" });
@@ -241,12 +222,6 @@ app.delete("/api/materiales/:id", validarToken, validarAdmin, async (req, res) =
       return res.status(404).json({ message: "Material no encontrado" });
     }
 
-    const filePath = path.join(uploadsDir, material.archivo);
-
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-
     await prisma.material.delete({
       where: { id },
     });
@@ -255,6 +230,21 @@ app.delete("/api/materiales/:id", validarToken, validarAdmin, async (req, res) =
   } catch (error) {
     console.error("Error al eliminar material:", error);
     res.status(500).json({ message: "Error al eliminar material" });
+  }
+});
+
+app.get("/api/dashboard", async (req, res) => {
+  try {
+    const totalMateriales = await prisma.material.count();
+    const totalUsuarios = await prisma.usuario.count();
+
+    res.json({
+      totalMateriales,
+      totalUsuarios,
+    });
+  } catch (error) {
+    console.error("Error al consultar dashboard:", error);
+    res.status(500).json({ message: "Error al consultar dashboard" });
   }
 });
 
