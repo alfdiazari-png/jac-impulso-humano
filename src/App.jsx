@@ -31,6 +31,23 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  CartesianGrid,
+  Legend,
+  AreaChart,
+  Area,
+} from "recharts";
 import jacLogo from "./assets/JAC.png";
 import jacAuto from "./assets/jac-auto.png";
 
@@ -183,6 +200,94 @@ export default function JacLiderazgoEmpresarial() {
       usuarios: 2,
     };
   }, [materiales]);
+
+  const dataTop = useMemo(() => {
+    const lista = dashboard?.topMateriales?.length ? dashboard.topMateriales : materiales;
+
+    return lista.slice(0, 5).map((item) => ({
+      nombre: item.titulo?.length > 22 ? `${item.titulo.substring(0, 22)}...` : item.titulo,
+      descargas: item.descargas || 0,
+    }));
+  }, [dashboard, materiales]);
+
+  const dataCategorias = useMemo(() => {
+    const agrupado = {};
+
+    materiales.forEach((item) => {
+      const nombreCategoria = item.categoria || "Sin categoría";
+      agrupado[nombreCategoria] = (agrupado[nombreCategoria] || 0) + 1;
+    });
+
+    return Object.entries(agrupado).map(([name, value]) => ({
+      name,
+      value,
+    }));
+  }, [materiales]);
+
+  const coloresGraficas = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6"];
+
+  const dataTendenciaMensual = useMemo(() => {
+    const meses = {};
+
+    materiales.forEach((item) => {
+      const fecha = item.fecha || "Sin fecha";
+      const mes = fecha !== "Sin fecha" ? fecha.slice(0, 7) : "Sin fecha";
+
+      if (!meses[mes]) {
+        meses[mes] = {
+          mes,
+          materiales: 0,
+          descargas: 0,
+          vistas: 0,
+        };
+      }
+
+      meses[mes].materiales += 1;
+      meses[mes].descargas += item.descargas || 0;
+      meses[mes].vistas += item.vistas || 0;
+    });
+
+    return Object.values(meses).sort((a, b) => a.mes.localeCompare(b.mes));
+  }, [materiales]);
+
+  const dataTipos = useMemo(() => {
+    const agrupado = {};
+
+    materiales.forEach((item) => {
+      const tipo = item.tipo || "SIN TIPO";
+      agrupado[tipo] = (agrupado[tipo] || 0) + 1;
+    });
+
+    return Object.entries(agrupado).map(([tipo, total]) => ({ tipo, total }));
+  }, [materiales]);
+
+  const resumenBI = useMemo(() => {
+    const totalMateriales = dashboard?.totalMateriales ?? materiales.length;
+    const totalDescargas = dashboard?.totalDescargas ?? estadisticas.descargas;
+    const top = dashboard?.topMateriales?.length ? dashboard.topMateriales : materiales;
+    const materialEstrella = [...top].sort((a, b) => (b.descargas || 0) - (a.descargas || 0))[0];
+    const categoriaLider = [...dataCategorias].sort((a, b) => b.value - a.value)[0];
+    const promedioDescargas = totalMateriales > 0 ? Math.round(totalDescargas / totalMateriales) : 0;
+
+    let semaforo = "Rojo";
+    let semaforoTexto = "Actividad inicial";
+
+    if (totalDescargas >= 100) {
+      semaforo = "Verde";
+      semaforoTexto = "Alto uso documental";
+    } else if (totalDescargas >= 30) {
+      semaforo = "Amarillo";
+      semaforoTexto = "Uso en crecimiento";
+    }
+
+    return {
+      promedioDescargas,
+      materialEstrella,
+      categoriaLider,
+      semaforo,
+      semaforoTexto,
+    };
+  }, [dashboard, materiales, estadisticas.descargas, dataCategorias]);
 
   const materialesFiltrados = useMemo(() => {
     return materiales.filter((item) => {
@@ -588,6 +693,173 @@ export default function JacLiderazgoEmpresarial() {
             </Card>
           </div>
 
+          <div className="mt-10 grid gap-6 md:grid-cols-2">
+            <Card className="rounded-3xl border-white/10 bg-white/10 text-white">
+              <CardContent className="p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <BarChart3 className="text-red-400" />
+                  <h2 className="text-2xl font-bold">Top descargas</h2>
+                </div>
+                <div className="h-[320px] min-w-0 rounded-2xl bg-neutral-950/30 p-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dataTop} margin={{ top: 10, right: 10, left: -20, bottom: 30 }}>
+                      <XAxis dataKey="nombre" stroke="#cbd5e1" angle={-20} textAnchor="end" interval={0} height={70} />
+                      <YAxis stroke="#cbd5e1" allowDecimals={false} />
+                      <Tooltip
+                        contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "14px", color: "#fff" }}
+                        cursor={{ fill: "rgba(255,255,255,0.08)" }}
+                      />
+                      <Bar dataKey="descargas" name="Descargas" radius={[10, 10, 0, 0]} fill="#ef4444" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl border-white/10 bg-white/10 text-white">
+              <CardContent className="p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <FolderOpen className="text-red-400" />
+                  <h2 className="text-2xl font-bold">Materiales por categoría</h2>
+                </div>
+                <div className="h-[320px] min-w-0 rounded-2xl bg-neutral-950/30 p-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={dataCategorias}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={105}
+                        label={({ name, value }) => `${name}: ${value}`}
+                      >
+                        {dataCategorias.map((entry, index) => (
+                          <Cell key={`categoria-${entry.name}`} fill={coloresGraficas[index % coloresGraficas.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "14px", color: "#fff" }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="mt-10 grid gap-6 md:grid-cols-[1.15fr_0.85fr]">
+            <Card className="rounded-3xl border-white/10 bg-white/10 text-white">
+              <CardContent className="p-6">
+                <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-center gap-3">
+                    <LayoutDashboard className="text-red-400" />
+                    <h2 className="text-2xl font-bold">Tendencia ejecutiva mensual</h2>
+                  </div>
+                  <span className="rounded-full bg-white/10 px-4 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-300">
+                    BI Dirección
+                  </span>
+                </div>
+                <div className="h-[340px] min-w-0 rounded-2xl bg-neutral-950/30 p-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={dataTendenciaMensual} margin={{ top: 10, right: 15, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="descargasGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.75} />
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0.05} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.12)" />
+                      <XAxis dataKey="mes" stroke="#cbd5e1" />
+                      <YAxis stroke="#cbd5e1" allowDecimals={false} />
+                      <Tooltip
+                        contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "14px", color: "#fff" }}
+                      />
+                      <Legend />
+                      <Area type="monotone" dataKey="descargas" name="Descargas" stroke="#ef4444" fill="url(#descargasGradient)" strokeWidth={3} />
+                      <Line type="monotone" dataKey="materiales" name="Materiales cargados" stroke="#f97316" strokeWidth={3} dot={{ r: 4 }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl border-white/10 bg-white/10 text-white">
+              <CardContent className="p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <Target className="text-red-400" />
+                  <h2 className="text-2xl font-bold">Semáforo ejecutivo</h2>
+                </div>
+                <div className="grid gap-4">
+                  <div className="rounded-3xl border border-white/10 bg-neutral-950/30 p-5">
+                    <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Estatus de adopción</p>
+                    <div className="mt-3 flex items-center gap-3">
+                      <span className={`h-4 w-4 rounded-full ${resumenBI.semaforo === "Verde" ? "bg-emerald-400" : resumenBI.semaforo === "Amarillo" ? "bg-yellow-300" : "bg-red-500"}`} />
+                      <p className="text-3xl font-black">{resumenBI.semaforo}</p>
+                    </div>
+                    <p className="mt-2 text-slate-300">{resumenBI.semaforoTexto}</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <MiniMetric title="Promedio de descargas" value={resumenBI.promedioDescargas} />
+                    <MiniMetric title="Categoría líder" value={resumenBI.categoriaLider?.name || "Sin datos"} />
+                  </div>
+                  <div className="rounded-3xl border border-white/10 bg-neutral-950/30 p-5">
+                    <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Material más consultado</p>
+                    <p className="mt-2 text-xl font-black">{resumenBI.materialEstrella?.titulo || "Sin actividad registrada"}</p>
+                    <p className="mt-1 text-sm text-red-300">{resumenBI.materialEstrella?.descargas || 0} descargas acumuladas</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="mt-10 grid gap-6 md:grid-cols-2">
+            <Card className="rounded-3xl border-white/10 bg-white/10 text-white">
+              <CardContent className="p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <BarChart3 className="text-red-400" />
+                  <h2 className="text-2xl font-bold">Comparativo por tipo de archivo</h2>
+                </div>
+                <div className="h-[320px] min-w-0 rounded-2xl bg-neutral-950/30 p-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dataTipos} layout="vertical" margin={{ top: 10, right: 20, left: 20, bottom: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.12)" />
+                      <XAxis type="number" stroke="#cbd5e1" allowDecimals={false} />
+                      <YAxis dataKey="tipo" type="category" stroke="#cbd5e1" width={70} />
+                      <Tooltip
+                        contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "14px", color: "#fff" }}
+                      />
+                      <Bar dataKey="total" name="Materiales" radius={[0, 10, 10, 0]} fill="#f97316" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl border-white/10 bg-white/10 text-white">
+              <CardContent className="p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <ShieldCheck className="text-red-400" />
+                  <h2 className="text-2xl font-bold">Lectura gerencial</h2>
+                </div>
+                <div className="grid gap-4 text-sm leading-7 text-slate-300">
+                  <div className="rounded-2xl bg-neutral-950/30 p-4">
+                    <p className="font-bold text-white">Adopción del portal</p>
+                    <p>El portal registra {dashboard?.totalDescargas ?? estadisticas.descargas} descargas sobre {dashboard?.totalMateriales ?? estadisticas.documentos} materiales disponibles.</p>
+                  </div>
+                  <div className="rounded-2xl bg-neutral-950/30 p-4">
+                    <p className="font-bold text-white">Enfoque de contenido</p>
+                    <p>La categoría con mayor presencia es {resumenBI.categoriaLider?.name || "sin datos suficientes"}, útil para orientar campañas internas de cultura y capacitación.</p>
+                  </div>
+                  <div className="rounded-2xl bg-neutral-950/30 p-4">
+                    <p className="font-bold text-white">Acción sugerida</p>
+                    <p>Impulsar los materiales con baja descarga mediante comunicados internos, juntas matutinas y seguimiento de líderes de área.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           <div className="mt-8 grid gap-6 md:grid-cols-[1fr_1fr]">
             <Card className="rounded-3xl border-white/10 bg-white/10 text-white">
               <CardContent className="p-6">
@@ -776,6 +1048,15 @@ function KpiCard({ icon: Icon, title, value }) {
         <p className="mt-1 text-4xl font-black">{value}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function MiniMetric({ title, value }) {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-neutral-950/30 p-5">
+      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{title}</p>
+      <p className="mt-2 text-2xl font-black text-white">{value}</p>
+    </div>
   );
 }
 
