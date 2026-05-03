@@ -13,12 +13,14 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || "jac_super_seguro_2026";
 
+// 🌐 Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// 🌐 CORS
 const corsOptions = {
   origin: [
     "https://benevolent-torte-ff278c.netlify.app",
@@ -33,6 +35,7 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(express.json());
 
+// ☁️ Upload Cloudinary
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
@@ -43,12 +46,11 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage });
 
+// 🔐 Middlewares
 function validarToken(req, res, next) {
   const auth = req.headers.authorization;
 
-  if (!auth) {
-    return res.status(401).json({ message: "Token requerido" });
-  }
+  if (!auth) return res.status(401).json({ message: "Token requerido" });
 
   const token = auth.split(" ")[1];
 
@@ -64,10 +66,10 @@ function validarAdmin(req, res, next) {
   if (req.usuario.rol !== "admin") {
     return res.status(403).json({ message: "Acceso solo para administrador" });
   }
-
   next();
 }
 
+// 🔥 ROOT
 app.get("/", (req, res) => {
   res.json({
     status: "OK",
@@ -76,6 +78,7 @@ app.get("/", (req, res) => {
   });
 });
 
+// 🔥 HEALTH (PARA CRON-JOB)
 app.get("/health", (req, res) => {
   res.json({
     status: "healthy",
@@ -83,6 +86,7 @@ app.get("/health", (req, res) => {
   });
 });
 
+// 🔐 LOGIN
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { correo, password } = req.body;
@@ -126,12 +130,11 @@ app.post("/api/auth/login", async (req, res) => {
     });
   } catch (error) {
     console.error("Error en login:", error);
-    res.status(500).json({
-      message: "Error interno del servidor",
-    });
+    res.status(500).json({ message: "Error interno del servidor" });
   }
 });
 
+// 📁 MATERIALES
 app.get("/api/materiales", async (req, res) => {
   try {
     const materiales = await prisma.material.findMany({
@@ -140,11 +143,12 @@ app.get("/api/materiales", async (req, res) => {
 
     res.json(materiales);
   } catch (error) {
-    console.error("Error al consultar materiales:", error);
-    res.status(500).json({ message: "Error al consultar materiales" });
+    console.error(error);
+    res.status(500).json({ message: "Error materiales" });
   }
 });
 
+// 📤 SUBIR MATERIAL
 app.post(
   "/api/materiales",
   validarToken,
@@ -178,12 +182,13 @@ app.post(
 
       res.status(201).json(material);
     } catch (error) {
-      console.error("Error al subir material:", error);
-      res.status(500).json({ message: "Error al subir material" });
+      console.error(error);
+      res.status(500).json({ message: "Error al subir" });
     }
   }
 );
 
+// 📥 DESCARGAR
 app.get("/api/materiales/:id/descargar", async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -193,61 +198,74 @@ app.get("/api/materiales/:id/descargar", async (req, res) => {
     });
 
     if (!material) {
-      return res.status(404).json({ message: "Material no encontrado" });
+      return res.status(404).json({ message: "No encontrado" });
     }
 
     await prisma.material.update({
       where: { id },
-      data: {
-        descargas: material.descargas + 1,
-      },
+      data: { descargas: material.descargas + 1 },
     });
 
     res.redirect(material.archivo);
   } catch (error) {
-    console.error("Error al descargar material:", error);
-    res.status(500).json({ message: "Error al descargar material" });
+    console.error(error);
+    res.status(500).json({ message: "Error descarga" });
   }
 });
 
-app.delete("/api/materiales/:id", validarToken, validarAdmin, async (req, res) => {
-  try {
-    const id = Number(req.params.id);
+// 🗑️ ELIMINAR
+app.delete(
+  "/api/materiales/:id",
+  validarToken,
+  validarAdmin,
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id);
 
-    const material = await prisma.material.findUnique({
-      where: { id },
-    });
+      await prisma.material.delete({ where: { id } });
 
-    if (!material) {
-      return res.status(404).json({ message: "Material no encontrado" });
+      res.json({ message: "Eliminado" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Error eliminar" });
     }
-
-    await prisma.material.delete({
-      where: { id },
-    });
-
-    res.json({ message: "Material eliminado correctamente" });
-  } catch (error) {
-    console.error("Error al eliminar material:", error);
-    res.status(500).json({ message: "Error al eliminar material" });
   }
-});
+);
 
+// 📊 DASHBOARD PRO
 app.get("/api/dashboard", async (req, res) => {
   try {
     const totalMateriales = await prisma.material.count();
     const totalUsuarios = await prisma.usuario.count();
 
+    const descargas = await prisma.material.aggregate({
+      _sum: { descargas: true },
+    });
+
+    const topMateriales = await prisma.material.findMany({
+      orderBy: { descargas: "desc" },
+      take: 5,
+    });
+
+    const recientes = await prisma.material.findMany({
+      orderBy: { id: "desc" },
+      take: 5,
+    });
+
     res.json({
       totalMateriales,
       totalUsuarios,
+      totalDescargas: descargas._sum.descargas || 0,
+      topMateriales,
+      recientes,
     });
   } catch (error) {
-    console.error("Error al consultar dashboard:", error);
-    res.status(500).json({ message: "Error al consultar dashboard" });
+    console.error(error);
+    res.status(500).json({ message: "Error dashboard" });
   }
 });
 
+// ❌ 404
 app.use((req, res) => {
   res.status(404).json({
     message: "Ruta no encontrada",
@@ -255,6 +273,7 @@ app.use((req, res) => {
   });
 });
 
+// 🚀 START
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Backend JAC corriendo en puerto ${PORT}`);
 });

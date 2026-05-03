@@ -126,6 +126,8 @@ export default function JacLiderazgoEmpresarial() {
   const [categoria, setCategoria] = useState("Todos");
   const [busqueda, setBusqueda] = useState("");
   const [materiales, setMateriales] = useState(materialesBase);
+  const [dashboard, setDashboard] = useState(null);
+  const [cargandoDashboard, setCargandoDashboard] = useState(false);
   const [token, setToken] = useState(localStorage.getItem("token") || "");
   const [cargando, setCargando] = useState(false);
   const [backendActivo, setBackendActivo] = useState(false);
@@ -151,8 +153,24 @@ export default function JacLiderazgoEmpresarial() {
     }
   };
 
+  const cargarDashboard = async () => {
+    try {
+      setCargandoDashboard(true);
+      const res = await fetchConRetry(`${API_URL}/dashboard`);
+      if (!res.ok) throw new Error("No se pudo consultar el dashboard");
+      const data = await res.json();
+      setDashboard(data);
+      setBackendActivo(true);
+    } catch (error) {
+      console.warn("No se pudo cargar el dashboard desde backend.", error);
+    } finally {
+      setCargandoDashboard(false);
+    }
+  };
+
   useEffect(() => {
     cargarMateriales();
+    cargarDashboard();
   }, []);
 
   const estadisticas = useMemo(() => {
@@ -200,6 +218,7 @@ export default function JacLiderazgoEmpresarial() {
       setUsuario(data.usuario);
       setVista("dashboard");
       setBackendActivo(true);
+      await cargarDashboard();
     } catch (error) {
       setErrorLogin("No se pudo conectar con el servidor backend. Si Render estaba dormido, espera unos segundos e intenta nuevamente.");
       setBackendActivo(false);
@@ -244,6 +263,7 @@ export default function JacLiderazgoEmpresarial() {
       setArchivoNombre(file.name);
       setNuevoMaterial({ titulo: "", categoria: "Reflexión", descripcion: "" });
       await cargarMateriales();
+      await cargarDashboard();
       alert("Archivo subido correctamente.");
     } catch (error) {
       console.error(error);
@@ -273,6 +293,7 @@ export default function JacLiderazgoEmpresarial() {
       if (!res.ok) throw new Error("Error al eliminar material");
 
       await cargarMateriales();
+      await cargarDashboard();
     } catch (error) {
       console.error(error);
       alert("No se pudo eliminar el material.");
@@ -508,15 +529,23 @@ export default function JacLiderazgoEmpresarial() {
             <div>
               <p className="font-semibold text-red-400">Dashboard ejecutivo</p>
               <h1 className="text-4xl font-black">Bienvenido, {usuario.nombre}</h1>
-              <p className="mt-2 text-slate-300">Resumen de uso del portal JAC Impulso Humano.</p>
+              <p className="mt-2 text-slate-300">
+                Indicadores reales del portal JAC Impulso Humano conectados al backend corporativo.
+              </p>
+              {cargandoDashboard && (
+                <p className="mt-2 text-sm text-yellow-300">Actualizando indicadores...</p>
+              )}
             </div>
+            <Button onClick={cargarDashboard} className="rounded-2xl bg-red-600 px-5 py-5 font-bold hover:bg-red-700">
+              <BarChart3 className="mr-2 h-4 w-4" /> Actualizar dashboard
+            </Button>
           </div>
 
           <div className="grid gap-5 md:grid-cols-4">
-            <KpiCard icon={FolderOpen} title="Documentos" value={estadisticas.documentos} />
-            <KpiCard icon={Download} title="Descargas" value={estadisticas.descargas} />
-            <KpiCard icon={Eye} title="Vistas" value={estadisticas.vistas} />
-            <KpiCard icon={Users} title="Usuarios" value={estadisticas.usuarios} />
+            <KpiCard icon={FolderOpen} title="Documentos" value={dashboard?.totalMateriales ?? estadisticas.documentos} />
+            <KpiCard icon={Download} title="Descargas" value={dashboard?.totalDescargas ?? estadisticas.descargas} />
+            <KpiCard icon={Users} title="Usuarios" value={dashboard?.totalUsuarios ?? estadisticas.usuarios} />
+            <KpiCard icon={Eye} title="Materiales activos" value={dashboard?.topMateriales?.length ?? materiales.length} />
           </div>
 
           <div className="mt-8 grid gap-6 md:grid-cols-[1fr_380px]">
@@ -527,20 +556,20 @@ export default function JacLiderazgoEmpresarial() {
                   <h2 className="text-2xl font-bold">Materiales con mayor actividad</h2>
                 </div>
                 <div className="grid gap-3">
-                  {[...materiales]
-                    .sort((a, b) => b.descargas - a.descargas)
-                    .slice(0, 5)
-                    .map((item) => (
-                      <div key={item.id} className="rounded-2xl bg-white/10 p-4">
-                        <div className="flex justify-between gap-4">
-                          <p className="font-bold">{item.titulo}</p>
-                          <span className="text-red-300">{item.descargas} descargas</span>
-                        </div>
-                        <div className="mt-3 h-2 rounded-full bg-white/10">
-                          <div className="h-2 rounded-full bg-red-500" style={{ width: `${Math.min(item.descargas * 2, 100)}%` }} />
-                        </div>
+                  {(dashboard?.topMateriales?.length ? dashboard.topMateriales : [...materiales].sort((a, b) => b.descargas - a.descargas).slice(0, 5)).map((item) => (
+                    <div key={item.id} className="rounded-2xl bg-white/10 p-4">
+                      <div className="flex justify-between gap-4">
+                        <p className="font-bold">{item.titulo}</p>
+                        <span className="text-red-300">{item.descargas || 0} descargas</span>
                       </div>
-                    ))}
+                      <div className="mt-3 h-2 rounded-full bg-white/10">
+                        <div
+                          className="h-2 rounded-full bg-red-500"
+                          style={{ width: `${Math.min((item.descargas || 0) * 2, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -555,6 +584,52 @@ export default function JacLiderazgoEmpresarial() {
                 <Button className="mt-5 rounded-2xl bg-white text-red-700 hover:bg-red-50">
                   Preparado para IA
                 </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="mt-8 grid gap-6 md:grid-cols-[1fr_1fr]">
+            <Card className="rounded-3xl border-white/10 bg-white/10 text-white">
+              <CardContent className="p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <CalendarDays className="text-red-400" />
+                  <h2 className="text-2xl font-bold">Últimos materiales cargados</h2>
+                </div>
+                <div className="grid gap-3">
+                  {(dashboard?.recientes?.length ? dashboard.recientes : materiales.slice(0, 5)).map((item) => (
+                    <div key={item.id} className="rounded-2xl bg-white/10 p-4">
+                      <p className="font-bold">{item.titulo}</p>
+                      <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-300">
+                        <span>{item.categoria}</span>
+                        <span>{item.tipo}</span>
+                        <span>{item.fecha}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl border-white/10 bg-white/10 text-white">
+              <CardContent className="p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <ShieldCheck className="text-red-400" />
+                  <h2 className="text-2xl font-bold">Resumen corporativo</h2>
+                </div>
+                <div className="grid gap-4 text-sm text-slate-300">
+                  <div className="rounded-2xl bg-white/10 p-4">
+                    <p className="font-bold text-white">Backend</p>
+                    <p>{backendActivo ? "Conectado a producción" : "Modo demo / servidor despertando"}</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 p-4">
+                    <p className="font-bold text-white">Repositorio documental</p>
+                    <p>{dashboard?.totalMateriales || materiales.length} materiales disponibles para consulta y descarga.</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 p-4">
+                    <p className="font-bold text-white">Gobierno de acceso</p>
+                    <p>Usuario activo: {usuario.nombre} · Rol: {usuario.rol}</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
