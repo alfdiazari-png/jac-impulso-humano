@@ -23,7 +23,7 @@ cloudinary.config({
 // 🌐 CORS
 const corsOptions = {
   origin: [
-    "https://benevolent-torte-ff278c.netlify.app",
+    ""https://y-seven-rouge-31.vercel.app",
     "http://localhost:5173",
     "http://localhost:5174",
   ],
