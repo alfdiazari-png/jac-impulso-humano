@@ -265,7 +265,104 @@ app.get("/api/dashboard", async (req, res) => {
   }
 });
 
-// ❌ 404
+// // 👥 USUARIOS PRO
+
+app.get("/api/usuarios", async (req, res) => {
+  try {
+    const usuarios = await prisma.usuario.findMany({
+      orderBy: { id: "desc" },
+      select: {
+        id: true,
+        nombre: true,
+        correo: true,
+        rol: true,
+        activo: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    res.json(usuarios);
+  } catch (error) {
+    console.error("Error usuarios:", error);
+    res.status(500).json({ message: "Error al obtener usuarios" });
+  }
+});
+
+app.post("/api/usuarios", async (req, res) => {
+  try {
+    const { nombre, correo, password, rol, activo } = req.body;
+
+    const existe = await prisma.usuario.findUnique({
+      where: { correo },
+    });
+
+    if (existe) {
+      return res.status(400).json({ message: "El correo ya existe" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const usuario = await prisma.usuario.create({
+      data: {
+        nombre,
+        correo,
+        password: passwordHash,
+        rol,
+        activo,
+      },
+    });
+
+    res.status(201).json(usuario);
+  } catch (error) {
+    console.error("Error crear usuario:", error);
+    res.status(500).json({ message: "Error al crear usuario" });
+  }
+});
+
+app.put("/api/usuarios/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { nombre, correo, password, rol, activo } = req.body;
+
+    const data = {
+      nombre,
+      correo,
+      rol,
+      activo,
+    };
+
+    if (password && password.trim() !== "") {
+      data.password = await bcrypt.hash(password, 10);
+    }
+
+    const usuario = await prisma.usuario.update({
+      where: { id },
+      data,
+    });
+
+    res.json(usuario);
+  } catch (error) {
+    console.error("Error actualizar usuario:", error);
+    res.status(500).json({ message: "Error al actualizar usuario" });
+  }
+});
+
+app.delete("/api/usuarios/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    await prisma.usuario.update({
+      where: { id },
+      data: { activo: false },
+    });
+
+    res.json({ message: "Usuario dado de baja correctamente" });
+  } catch (error) {
+    console.error("Error baja usuario:", error);
+    res.status(500).json({ message: "Error al dar de baja usuario" });
+  }
+});
 app.use((req, res) => {
   res.status(404).json({
     message: "Ruta no encontrada",
