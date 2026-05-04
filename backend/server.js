@@ -277,3 +277,77 @@ app.use((req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Backend JAC corriendo en puerto ${PORT}`);
 });
+
+// =========================
+// USUARIOS PRO API
+// =========================
+
+// Obtener usuarios
+app.get("/api/usuarios", async (req, res) => {
+  try {
+    const usuarios = await prisma.usuario.findMany({
+      orderBy: { id: "desc" },
+    });
+
+    res.json(usuarios);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al obtener usuarios" });
+  }
+});
+
+// Crear usuario
+app.post("/api/usuarios", async (req, res) => {
+  try {
+    const { nombre, correo, password, rol, activo } = req.body;
+
+    const nuevo = await prisma.usuario.create({
+      data: {
+        nombre,
+        correo,
+        password,
+        rol,
+        activo,
+      },
+    });
+
+    res.json(nuevo);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al crear usuario" });
+  }
+});
+
+// Actualizar usuario
+app.put("/api/usuarios/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, correo, rol, activo } = req.body;
+
+    const actualizado = await prisma.usuario.update({
+      where: { id: Number(id) },
+      data: { nombre, correo, rol, activo },
+    });
+
+    res.json(actualizado);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al actualizar usuario" });
+  }
+});
+
+// Eliminar usuario
+app.delete("/api/usuarios/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.usuario.delete({
+      where: { id: Number(id) },
+    });
+
+    res.json({ message: "Usuario eliminado" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al eliminar usuario" });
+  }
+});
